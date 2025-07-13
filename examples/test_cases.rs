@@ -1,4 +1,4 @@
-use jaydar::{find, find_with_nhk};
+use jaydar::{find, find_with_nhk, FindWithNhkResult};
 
 fn main() {
     println!("=== Test Case 1: 構成 vs 後世 Frequency ===");
@@ -22,27 +22,45 @@ fn main() {
         if katei_home.frequency_score > katei_course.frequency_score { "✓" } else { "✗ NOT" });
     
     println!("\n=== Test Case 3: 橋 vs 箸 Pitch Accent ===");
-    let hashi_results = find_with_nhk("はし");
-    let hashi_bridge = hashi_results.iter().find(|w| w.text == "橋").unwrap();
-    let hashi_chopsticks = hashi_results.iter().find(|w| w.text == "箸").unwrap();
-    
-    println!("橋 (bridge): pitch = {:?}", hashi_bridge.pitch_accent);
-    println!("箸 (chopsticks): pitch = {:?}", hashi_chopsticks.pitch_accent);
+    let hashi_result = find_with_nhk("はし");
+    match hashi_result {
+        FindWithNhkResult::MultipleMatches { homophones } => {
+            let hashi_bridge = homophones.iter().find(|w| w.text == "橋").unwrap();
+            let hashi_chopsticks = homophones.iter().find(|w| w.text == "箸").unwrap();
+            
+            println!("橋 (bridge): pitch = {:?}", hashi_bridge.pitch_accent);
+            println!("箸 (chopsticks): pitch = {:?}", hashi_chopsticks.pitch_accent);
+        }
+        _ => panic!("Unexpected result type"),
+    }
     
     // Check if they're fake homophones when searching for each
-    let bridge_results = find_with_nhk("橋");
-    let chopsticks_from_bridge = bridge_results.iter().find(|w| w.text == "箸").unwrap();
-    
-    let chopsticks_results = find_with_nhk("箸");
-    let bridge_from_chopsticks = chopsticks_results.iter().find(|w| w.text == "橋").unwrap();
+    let bridge_result = find_with_nhk("橋");
+    let chopsticks_result = find_with_nhk("箸");
     
     println!("\nWhen searching for 橋:");
-    println!("  箸 is marked as: {}", 
-        if chopsticks_from_bridge.is_true_homophone { "true homophone" } else { "fake homophone ✓" });
+    match bridge_result {
+        FindWithNhkResult::UniqueMatch { true_homophones, different_pitch_homophones } => {
+            if different_pitch_homophones.iter().any(|w| w.text == "箸") {
+                println!("  箸 is marked as: fake homophone ✓");
+            } else if true_homophones.iter().any(|w| w.text == "箸") {
+                println!("  箸 is marked as: true homophone");
+            }
+        }
+        _ => println!("  Unexpected result type"),
+    }
     
     println!("\nWhen searching for 箸:");
-    println!("  橋 is marked as: {}", 
-        if bridge_from_chopsticks.is_true_homophone { "true homophone" } else { "fake homophone ✓" });
+    match chopsticks_result {
+        FindWithNhkResult::UniqueMatch { true_homophones, different_pitch_homophones } => {
+            if different_pitch_homophones.iter().any(|w| w.text == "橋") {
+                println!("  橋 is marked as: fake homophone ✓");
+            } else if true_homophones.iter().any(|w| w.text == "橋") {
+                println!("  橋 is marked as: true homophone");
+            }
+        }
+        _ => println!("  Unexpected result type"),
+    }
     
     println!("\n=== Summary ===");
     println!("All frequency and pitch accent tests demonstrate expected behavior:");
