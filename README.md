@@ -15,7 +15,7 @@ A Rust library for finding **J**apanese **homo**phones and ranking them by frequ
 - Support for kanji, hiragana, and **katakana** input (ソーセージ and 双生児 are homophones)
 - Identify common vs uncommon words
 - Distinguish true homophones from "fake" homophones using NHK pitch accent data
-- Categorize results based on input type (unique word, reading, or no homophones)
+- Automatically determine input type (unique word, reading)
 - Automatic katakana-to-hiragana conversion for searches
 
 ## Usage
@@ -57,8 +57,9 @@ match result {
             println!("  {} - pitch: {:?}", word.text, word.pitch_accent);
         }
     }
+    // when the input is hiragana with multiple kanji matches
     FindWithNhkResult::MultipleMatches { homophones } => {
-        println!("Multiple matches found:");
+        println!("homopones:");
         for word in &homophones {
             println!("  {} - pitch: {:?}", word.text, word.pitch_accent);
         }
