@@ -2,6 +2,8 @@
 
 A Rust library for finding **J**apanese **homo**phones and ranking them by frequency using the JMDict dictionary, with optional NHK pitch accent data to distinguish true homophones from "fake" homophones (same reading, different pitch).
 
+<img width="1010" alt="image" src="https://github.com/user-attachments/assets/c2e4c646-63cd-4dff-87b7-e801403e83a9" />
+
 ![demo 0](./homo-kaitou.png)
 
 ![demo 1](./homo-kousei.png)
