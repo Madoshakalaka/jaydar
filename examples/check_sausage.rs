@@ -1,4 +1,4 @@
-use homophone_ranker::{find, find_with_nhk};
+use jaydar::{find, find_with_nhk};
 
 fn main() {
     println!("=== Checking ソーセージ readings ===\n");
@@ -17,7 +17,7 @@ fn main() {
     
     // Test katakana to hiragana conversion
     // Import from the crate root first
-    use homophone_ranker::kana_utils;
+    use jaydar::kana_utils;
     
     println!("\nKatakana to hiragana conversion:");
     println!("  ソーセージ -> {}", kana_utils::katakana_to_hiragana("ソーセージ"));

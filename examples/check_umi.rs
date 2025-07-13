@@ -1,4 +1,4 @@
-use homophone_ranker::find;
+use jaydar::find;
 
 fn main() {
     // Check if 海 has reading かい

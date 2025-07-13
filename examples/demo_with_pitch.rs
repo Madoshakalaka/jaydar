@@ -1,4 +1,4 @@
-use homophone_ranker::{find_with_nhk, WordFrequencyWithPitch};
+use jaydar::{find_with_nhk, WordFrequencyWithPitch};
 
 fn main() {
     // Example 1: Show pitch accent differences in こうせい
@@ -41,9 +41,13 @@ fn print_results_with_pitch(results: &[WordFrequencyWithPitch]) {
     
     for (i, word) in results.iter().enumerate() {
         if i < 15 {  // Show top 15
-            let pitch_str = match word.pitch_accent {
-                Some(p) => format!("{}", p),
-                None => "?".to_string(),
+            let pitch_str = if word.pitch_accent.is_empty() {
+                "?".to_string()
+            } else {
+                word.pitch_accent.iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             };
             
             let homophone_str = if word.is_true_homophone {

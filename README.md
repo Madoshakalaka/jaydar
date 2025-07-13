@@ -51,6 +51,12 @@ for word in homophones {
 
 When searching for "構成" (pitch 0), words like "後世" (pitch 1) will be marked as fake homophones because they have different pitch accents.
 
+Example with multiple pitch accents:
+```rust
+let homophones = find_with_nhk("ていど");
+// 程度 will have pitch_accent: vec![1, 0] - both pronunciations are valid
+```
+
 ### Katakana support
 
 ```rust
@@ -83,6 +89,8 @@ Higher scores indicate more common words.
 
 - **True homophones**: Words with the same reading AND pitch accent (e.g., 構成[0] and 公正[0])
 - **Fake homophones**: Words with the same reading but different pitch accent (e.g., 構成[0] and 後世[1])
+
+Note: Many Japanese words have multiple accepted pitch accents. For example, 程度 can be pronounced with either pitch accent 1 or 0. The library stores all accepted pitch accents in order of preference (most mainstream first).
 
 ### Frequency Ranking
 
@@ -134,7 +142,7 @@ pub struct WordFrequencyWithPitch {
     pub reading: String,
     pub frequency_score: u32,
     pub is_common: bool,
-    pub pitch_accent: Option<u8>,     // Pitch accent pattern (0-17)
+    pub pitch_accent: Vec<u8>,        // Multiple pitch accents in order of preference
     pub is_true_homophone: bool,      // false if different pitch from query
 }
 ```

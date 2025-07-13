@@ -1,4 +1,4 @@
-use homophone_ranker::{find, find_with_nhk};
+use jaydar::{find, find_with_nhk};
 
 fn main() {
     println!("=== Test Case 1: 構成 vs 後世 Frequency ===");

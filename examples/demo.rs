@@ -1,4 +1,4 @@
-use homophone_ranker::find;
+use jaydar::find;
 
 fn main() {
     // Example 1: Find homophones for a kana word
@@ -28,7 +28,7 @@ fn main() {
     print_results(&results);
 }
 
-fn print_results(results: &[homophone_ranker::WordFrequency]) {
+fn print_results(results: &[jaydar::WordFrequency]) {
     if results.is_empty() {
         println!("No homophones found.");
         return;

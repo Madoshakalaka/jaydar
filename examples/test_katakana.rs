@@ -1,4 +1,4 @@
-use homophone_ranker::find;
+use jaydar::find;
 
 fn main() {
     // First, let's see what happens when we search for カイ
