@@ -478,6 +478,28 @@ mod tests {
     }
     
     #[test]
+    fn test_kousei_regeneration() {
+        // Test searching for 更生 and verifying 後世 is marked as not a real homophone
+        let results = find_with_nhk("更生");
+        
+        // Find 後世 in the results
+        let kousei_after = results.iter().find(|w| w.text == "後世");
+        assert!(kousei_after.is_some(), "後世 should be in the results for 更生");
+        
+        // 後世 should be marked as not a real homophone since it has different pitch
+        let kousei_after = kousei_after.unwrap();
+        assert!(!kousei_after.is_true_homophone, 
+            "後世 should be marked as not a real homophone of 更生 due to different pitch accents");
+        
+        // Print debug info
+        println!("\n更生 homophones with pitch:");
+        for word in results.iter().filter(|w| ["更生", "後世", "構成", "公正"].contains(&w.text.as_str())) {
+            println!("  {} - pitch: {:?}, true homophone: {}", 
+                word.text, word.pitch_accent, word.is_true_homophone);
+        }
+    }
+    
+    #[test]
     fn test_difficult_cases() {
         // Test case 1: コック and 刻苦 are homophones (both read こっく)
         let kokku_results = find("コック");
