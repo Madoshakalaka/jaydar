@@ -141,16 +141,6 @@ cargo run --example demo_with_pitch
 
 Running the katakana demo:
 
-```bash
-cargo run --example katakana_demo
-```
-
-Testing specific cases:
-
-```bash
-cargo run --example test_cases
-```
-
 ## API Reference
 
 ### Types
