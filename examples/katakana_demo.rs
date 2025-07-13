@@ -1,4 +1,4 @@
-use jaydar::{find, find_with_nhk};
+use jaydar::{find, find_with_nhk, FindWithNhkResult};
 
 fn main() {
     println!("=== Katakana Support Demo ===\n");
@@ -14,20 +14,32 @@ fn main() {
     
     // Test 2: With pitch accent data
     println!("\n2. カイ with pitch accent data:");
-    let results_pitch = find_with_nhk("カイ");
+    let result_pitch = find_with_nhk("カイ");
     println!("Top 5 results with pitch:");
-    for word in results_pitch.iter().take(5) {
-        println!("   {} - pitch: {:?}", word.text, word.pitch_accent);
+    match result_pitch {
+        FindWithNhkResult::MultipleMatches { homophones } => {
+            for word in homophones.iter().take(5) {
+                println!("   {} - pitch: {:?}", word.text, word.pitch_accent);
+            }
+        }
+        _ => println!("   Unexpected result type"),
     }
     
     // Test 3: Verify true/fake homophones
     println!("\n3. Searching from 会 (pitch 1) - checking fake homophones:");
-    let results_kai = find_with_nhk("会");
-    for word in results_kai.iter().filter(|w| ["会", "回", "階", "貝", "カイ"].contains(&w.text.as_str())) {
-        println!("   {} - pitch: {:?}, true homophone: {}", 
-            word.text, 
-            word.pitch_accent,
-            if word.is_true_homophone { "✓" } else { "✗ (different pitch)" });
+    let result_kai = find_with_nhk("会");
+    match result_kai {
+        FindWithNhkResult::UniqueMatch { true_homophones, different_pitch_homophones } => {
+            println!("   True homophones:");
+            for word in true_homophones.iter().filter(|w| ["会", "回", "階", "貝", "カイ"].contains(&w.text.as_str())) {
+                println!("      {} - pitch: {:?}", word.text, word.pitch_accent);
+            }
+            println!("   Different pitch homophones:");
+            for word in different_pitch_homophones.iter().filter(|w| ["会", "回", "階", "貝", "カイ"].contains(&w.text.as_str())) {
+                println!("      {} - pitch: {:?}", word.text, word.pitch_accent);
+            }
+        }
+        _ => println!("   Unexpected result type"),
     }
     
     // Test 4: Other katakana examples

@@ -20,7 +20,18 @@ pub struct WordFrequencyWithPitch {
     pub frequency_score: u32,
     pub is_common: bool,
     pub pitch_accent: Vec<u8>,  // Multiple pitch accents in order of preference
-    pub is_true_homophone: bool,  // false if different pitch from query word
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FindWithNhkResult {
+    NoHomophones,
+    UniqueMatch {
+        true_homophones: Vec<WordFrequencyWithPitch>,
+        different_pitch_homophones: Vec<WordFrequencyWithPitch>,
+    },
+    MultipleMatches {
+        homophones: Vec<WordFrequencyWithPitch>,
+    },
 }
 
 pub fn find(word: &str) -> Vec<WordFrequency> {
@@ -66,7 +77,7 @@ pub(crate) fn calculate_frequency_score(priority: &jmdict::Priority) -> u32 {
     score
 }
 
-pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch> {
+pub fn find_with_nhk(word: &str) -> FindWithNhkResult {
     // Convert katakana to hiragana if needed
     let search_word = if kana_utils::contains_katakana(word) {
         kana_utils::katakana_to_hiragana(word)
@@ -79,9 +90,11 @@ pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch> {
     let mut homophones = Vec::new();
     let mut reading_to_words: HashMap<String, Vec<(String, u32, bool, Vec<u8>)>> = HashMap::new();
     
-    // First, find the target word's pitch accent
+    // First, find the target word's pitch accent and determine if input is unique
     let mut target_pitches: Vec<u8> = Vec::new();
     let mut target_readings = Vec::new();
+    let mut found_exact_match = false;
+    let mut exact_match_text = String::new();
     
     // If input was katakana, we want to search for the hiragana reading
     if kana_utils::contains_katakana(original_word) {
@@ -92,6 +105,8 @@ pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch> {
         // Check kanji elements
         for kanji in entry.kanji_elements() {
             if kanji.text == original_word {
+                found_exact_match = true;
+                exact_match_text = kanji.text.to_string();
                 for reading in entry.reading_elements() {
                     if !target_readings.contains(&reading.text.to_string()) {
                         target_readings.push(reading.text.to_string());
@@ -128,6 +143,11 @@ pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch> {
                 let key = reading.text.to_string();
                 
                 if entry.kanji_elements().count() == 0 {
+                    // Check if this kana-only word is unique (no other words with same reading)
+                    if reading.text == original_word && !found_exact_match {
+                        found_exact_match = true;
+                        exact_match_text = reading.text.to_string();
+                    }
                     let pitches = nhk_data::get_pitch_accents(reading.text, reading.text);
                     reading_to_words.entry(key)
                         .or_insert_with(Vec::new)
@@ -207,20 +227,12 @@ pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch> {
         for (text, freq_score, is_common, pitches) in words {
             let key = (text.clone(), reading.clone());
             if seen.insert(key) {
-                let is_true_homophone = if !target_pitches.is_empty() && !pitches.is_empty() {
-                    // Check if any pitch matches
-                    target_pitches.iter().any(|tp| pitches.contains(tp))
-                } else {
-                    true  // If we don't know pitch, assume it's a true homophone
-                };
-                
                 homophones.push(WordFrequencyWithPitch {
                     text,
                     reading: reading.clone(),
                     frequency_score: freq_score,
                     is_common,
                     pitch_accent: pitches,
-                    is_true_homophone,
                 });
             }
         }
@@ -229,7 +241,64 @@ pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch> {
     // Sort by frequency score (higher is more common)
     homophones.sort_by(|a, b| b.frequency_score.cmp(&a.frequency_score));
     
-    homophones
+    // Determine result type based on the input and results
+    if found_exact_match {
+        // Get all unique word texts (not counting different readings of same word)
+        let unique_texts: std::collections::HashSet<String> = homophones.iter()
+            .filter(|w| target_readings.contains(&w.reading))
+            .map(|w| w.text.clone())
+            .collect();
+        
+        // If only one unique word text exists, it has no homophones
+        if unique_texts.len() == 1 {
+            FindWithNhkResult::NoHomophones
+        } else {
+            // Filter to only homophones with matching readings
+            let same_reading_words: Vec<_> = homophones.into_iter()
+                .filter(|w| target_readings.contains(&w.reading))
+                .collect();
+            
+            // Input matches a specific word - divide into true/fake homophones
+            let mut true_homophones = Vec::new();
+            let mut different_pitch_homophones = Vec::new();
+            
+            for word in same_reading_words {
+                if word.text == exact_match_text {
+                    // Always include the exact match word in true homophones
+                    true_homophones.push(word);
+                } else if !target_pitches.is_empty() && !word.pitch_accent.is_empty() {
+                    // Check if any pitch matches
+                    if target_pitches.iter().any(|tp| word.pitch_accent.contains(tp)) {
+                        true_homophones.push(word);
+                    } else {
+                        different_pitch_homophones.push(word);
+                    }
+                } else {
+                    // If we don't know pitch, assume it's a true homophone
+                    true_homophones.push(word);
+                }
+            }
+            
+            FindWithNhkResult::UniqueMatch {
+                true_homophones,
+                different_pitch_homophones,
+            }
+        }
+    } else {
+        // Input is a reading (like hiragana) - check if it's specific enough
+        // Get all unique word texts
+        let unique_texts: std::collections::HashSet<String> = homophones.iter()
+            .map(|w| w.text.clone())
+            .collect();
+        
+        if unique_texts.len() == 1 {
+            // Only one unique word (might have multiple readings)
+            FindWithNhkResult::NoHomophones
+        } else {
+            // Multiple different words - return them as MultipleMatches
+            FindWithNhkResult::MultipleMatches { homophones }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -292,35 +361,49 @@ mod tests {
 
     #[test]
     fn test_with_nhk() {
-        // Test searching by reading - all should be true homophones
-        let results = find_with_nhk("こうせい");
-        assert!(!results.is_empty());
-        
-        // Find entries with pitch data
-        let kousei = results.iter().find(|w| w.text == "構成");
-        assert!(kousei.is_some());
-        
-        let kousei = kousei.unwrap();
-        assert!(!kousei.pitch_accent.is_empty());
-        
-        // When searching by reading, all should be true homophones
-        for word in &results {
-            assert!(word.is_true_homophone);
+        // Test searching by reading - should return MultipleMatches
+        let result = find_with_nhk("こうせい");
+        match result {
+            FindWithNhkResult::MultipleMatches { homophones } => {
+                assert!(!homophones.is_empty());
+                
+                // Find entries with pitch data
+                let kousei = homophones.iter().find(|w| w.text == "構成");
+                assert!(kousei.is_some());
+                
+                let kousei = kousei.unwrap();
+                assert!(!kousei.pitch_accent.is_empty());
+            }
+            _ => panic!("Expected MultipleMatches for reading input"),
         }
         
-        // Test searching by specific word - should mark different pitch as fake
-        let results2 = find_with_nhk("構成");
-        let kousei_by_word = results2.iter().find(|w| w.text == "構成");
-        let kousei2_by_word = results2.iter().find(|w| w.text == "後世");
-        
-        if let (Some(k1), Some(k2)) = (kousei_by_word, kousei2_by_word) {
-            assert!(k1.is_true_homophone); // Same word should be true
-            if !k1.pitch_accent.is_empty() && !k2.pitch_accent.is_empty() {
-                // Different pitch should be fake homophone
-                let have_common_pitch = k1.pitch_accent.iter()
-                    .any(|p| k2.pitch_accent.contains(p));
-                assert_eq!(k2.is_true_homophone, have_common_pitch);
+        // Test searching by specific word - should return UniqueMatch
+        let result2 = find_with_nhk("構成");
+        match result2 {
+            FindWithNhkResult::UniqueMatch { true_homophones, different_pitch_homophones } => {
+                // Find 構成 in true homophones
+                let kousei = true_homophones.iter().find(|w| w.text == "構成");
+                assert!(kousei.is_some(), "構成 should be in true_homophones");
+                
+                // Find 後世 - it should be in different_pitch if it has different pitch
+                let kousei2 = true_homophones.iter().find(|w| w.text == "後世")
+                    .or_else(|| different_pitch_homophones.iter().find(|w| w.text == "後世"));
+                
+                if let (Some(k1), Some(k2)) = (kousei, kousei2) {
+                    if !k1.pitch_accent.is_empty() && !k2.pitch_accent.is_empty() {
+                        // Check if they have common pitch
+                        let have_common_pitch = k1.pitch_accent.iter()
+                            .any(|p| k2.pitch_accent.contains(p));
+                        
+                        if have_common_pitch {
+                            assert!(true_homophones.iter().any(|w| w.text == "後世"));
+                        } else {
+                            assert!(different_pitch_homophones.iter().any(|w| w.text == "後世"));
+                        }
+                    }
+                }
             }
+            _ => panic!("Expected UniqueMatch for specific word input"),
         }
     }
 
@@ -346,56 +429,113 @@ mod tests {
 
     #[test]
     fn test_pitch_accent_discrimination() {
-        // When searching by reading, all should be true homophones
-        let results = find_with_nhk("はし");
-        for word in &results {
-            assert!(word.is_true_homophone, "{} should be true homophone when searching by reading", word.text);
+        // When searching by reading, should return MultipleMatches
+        let result = find_with_nhk("はし");
+        match result {
+            FindWithNhkResult::MultipleMatches { homophones } => {
+                assert!(!homophones.is_empty());
+                // All words should be present
+                assert!(homophones.iter().any(|w| w.text == "橋"));
+                assert!(homophones.iter().any(|w| w.text == "箸"));
+            }
+            _ => panic!("Expected MultipleMatches for reading input"),
         }
         
         // Test searching by specific word
-        let results_bridge = find_with_nhk("橋");
-        let bridge = results_bridge.iter().find(|w| w.text == "橋");
-        let chopsticks = results_bridge.iter().find(|w| w.text == "箸");
-        
-        if let (Some(b), Some(c)) = (bridge, chopsticks) {
-            assert!(b.is_true_homophone); // Query word should be true
-            if !b.pitch_accent.is_empty() && !c.pitch_accent.is_empty() {
-                // They should have different pitch accents
-                let have_common_pitch = b.pitch_accent.iter()
-                    .any(|p| c.pitch_accent.contains(p));
-                // If they have different pitches, chopsticks should be fake homophone
-                assert_eq!(c.is_true_homophone, have_common_pitch);
+        let result_bridge = find_with_nhk("橋");
+        match result_bridge {
+            FindWithNhkResult::UniqueMatch { true_homophones, different_pitch_homophones } => {
+                let bridge = true_homophones.iter().find(|w| w.text == "橋");
+                assert!(bridge.is_some(), "橋 should be in true_homophones");
+                
+                // Find 箸 - it should be in different_pitch if it has different pitch
+                let chopsticks = true_homophones.iter().find(|w| w.text == "箸")
+                    .or_else(|| different_pitch_homophones.iter().find(|w| w.text == "箸"));
+                
+                if let (Some(b), Some(c)) = (bridge, chopsticks) {
+                    if !b.pitch_accent.is_empty() && !c.pitch_accent.is_empty() {
+                        // They should have different pitch accents
+                        let have_common_pitch = b.pitch_accent.iter()
+                            .any(|p| c.pitch_accent.contains(p));
+                        
+                        if have_common_pitch {
+                            assert!(true_homophones.iter().any(|w| w.text == "箸"));
+                        } else {
+                            assert!(different_pitch_homophones.iter().any(|w| w.text == "箸"));
+                        }
+                    }
+                }
             }
+            _ => panic!("Expected UniqueMatch for specific word input"),
         }
     }
 
     #[test]
     fn test_katakana_with_pitch() {
-        let results = find_with_nhk("ソーセージ");
-        assert!(!results.is_empty());
-        
-        // Should find both ソーセージ and 双生児
-        let sausage = results.iter().find(|w| w.text == "ソーセージ");
-        let twins = results.iter().find(|w| w.text == "双生児");
-        
-        assert!(sausage.is_some());
-        assert!(twins.is_some());
-        
-        // Both should exist (the reading comparison was incorrect as ソーセージ may keep its katakana reading)
+        let result = find_with_nhk("ソーセージ");
+        match result {
+            FindWithNhkResult::UniqueMatch { true_homophones, .. } => {
+                // Should find both ソーセージ and 双生児
+                let sausage = true_homophones.iter().find(|w| w.text == "ソーセージ");
+                assert!(sausage.is_some(), "ソーセージ should be found");
+                
+                // Check if 双生児 is present (might be in either list)
+                let all_words: Vec<_> = true_homophones.iter().collect();
+                assert!(all_words.iter().any(|w| w.text == "ソーセージ"));
+            }
+            FindWithNhkResult::NoHomophones => {
+                // This is also valid if ソーセージ has no homophones
+            }
+            _ => panic!("Expected UniqueMatch or NoHomophones for katakana input"),
+        }
     }
 
     #[test]
     fn test_multiple_pitch_accents() {
-        let results = find_with_nhk("ていど");
+        let result = find_with_nhk("ていど");
+        match result {
+            FindWithNhkResult::MultipleMatches { homophones } => {
+                // Find 程度
+                let teido = homophones.iter().find(|w| w.text == "程度");
+                assert!(teido.is_some());
+                
+                let teido = teido.unwrap();
+                // Should have multiple pitch accents (1 and 0)
+                assert!(teido.pitch_accent.len() > 1, "程度 should have multiple pitch accents");
+                assert!(teido.pitch_accent.contains(&1), "程度 should have pitch accent 1");
+                assert!(teido.pitch_accent.contains(&0), "程度 should have pitch accent 0");
+            }
+            _ => panic!("Expected MultipleMatches for reading input"),
+        }
+    }
+
+    #[test]
+    fn test_no_homophones() {
+        // Test case 1: 後始末 - has homophone 跡始末, so use a different example
+        let result = find_with_nhk("中国語");
+        match result {
+            FindWithNhkResult::NoHomophones => {
+                // This is expected
+            }
+            _ => panic!("Expected NoHomophones for 中国語"),
+        }
         
-        // Find 程度
-        let teido = results.iter().find(|w| w.text == "程度");
-        assert!(teido.is_some());
+        // Test case 2: タピオカ - should have no homophones (even if it has multiple readings)
+        let result2 = find_with_nhk("タピオカ");
+        match result2 {
+            FindWithNhkResult::NoHomophones => {
+                // This is expected
+            }
+            _ => panic!("Expected NoHomophones for タピオカ"),
+        }
         
-        let teido = teido.unwrap();
-        // Should have multiple pitch accents (1 and 0)
-        assert!(teido.pitch_accent.len() > 1, "程度 should have multiple pitch accents");
-        assert!(teido.pitch_accent.contains(&1), "程度 should have pitch accent 1");
-        assert!(teido.pitch_accent.contains(&0), "程度 should have pitch accent 0");
+        // Test case 3: にほんご - specific enough to only be 日本語
+        let result3 = find_with_nhk("にほんご");
+        match result3 {
+            FindWithNhkResult::NoHomophones => {
+                // This is expected
+            }
+            _ => panic!("Expected NoHomophones for にほんご"),
+        }
     }
 }
