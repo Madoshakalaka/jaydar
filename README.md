@@ -37,24 +37,43 @@ for word in homophones {
 ### With NHK pitch accent data
 
 ```rust
-use jaydar::find_with_nhk;
+use jaydar::{find_with_nhk, FindWithNhkResult};
 
-let homophones = find_with_nhk("こうせい");
-for word in homophones {
-    println!("{} - pitch: {:?}, true homophone: {}", 
-        word.text,
-        word.pitch_accent,
-        word.is_true_homophone
-    );
+// Searching by reading returns all words with that reading
+let result = find_with_nhk("こうせい");
+match result {
+    FindWithNhkResult::MultipleMatches { homophones } => {
+        for word in homophones {
+            println!("{} - pitch: {:?}", word.text, word.pitch_accent);
+        }
+    }
+    _ => {}
+}
+
+// Searching by specific word (kanji) separates true/fake homophones
+let result = find_with_nhk("構成");
+match result {
+    FindWithNhkResult::UniqueMatch { 
+        pitch_accent, 
+        true_homophones, 
+        different_pitch_homophones 
+    } => {
+        println!("構成 has pitch accent: {:?}", pitch_accent);
+        println!("True homophones (same pitch): {} words", true_homophones.len());
+        println!("Fake homophones (different pitch): {} words", different_pitch_homophones.len());
+    }
+    _ => {}
 }
 ```
 
-When searching for "構成" (pitch 0), words like "後世" (pitch 1) will be marked as fake homophones because they have different pitch accents.
+The function now distinguishes between:
+- **Reading-based search** (e.g., "こうせい"): Returns all homophones as `MultipleMatches`
+- **Word-specific search** (e.g., "構成"): Returns `UniqueMatch` with true/fake homophone separation
 
 Example with multiple pitch accents:
 ```rust
-let homophones = find_with_nhk("ていど");
-// 程度 will have pitch_accent: vec![1, 0] - both pronunciations are valid
+let result = find_with_nhk("ていど");
+// In MultipleMatches, 程度 will have pitch_accent: vec![1, 0] - both pronunciations are valid
 ```
 
 ### Katakana support
@@ -145,6 +164,17 @@ pub struct WordFrequencyWithPitch {
     pub pitch_accent: Vec<u8>,        // Multiple pitch accents in order of preference
     pub is_true_homophone: bool,      // false if different pitch from query
 }
+
+pub enum FindWithNhkResult {
+    UniqueMatch {
+        pitch_accent: Vec<u8>,
+        true_homophones: Vec<WordFrequencyWithPitch>,
+        different_pitch_homophones: Vec<WordFrequencyWithPitch>,
+    },
+    MultipleMatches {
+        homophones: Vec<WordFrequencyWithPitch>,
+    },
+}
 ```
 
 ### Functions
@@ -154,7 +184,7 @@ pub struct WordFrequencyWithPitch {
 pub fn find(word: &str) -> Vec<WordFrequency>
 
 // Find homophones with pitch accent data
-pub fn find_with_nhk(word: &str) -> Vec<WordFrequencyWithPitch>
+pub fn find_with_nhk(word: &str) -> FindWithNhkResult
 ```
 
 ## License
