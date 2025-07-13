@@ -1,0 +1,8 @@
+[package]
+name = "jaydar"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jmdict = { version = "2.0", features = ["full"] }
+phf = { version = "0.11", features = ["macros"] }
